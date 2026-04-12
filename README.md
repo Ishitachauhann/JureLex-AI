@@ -1,6 +1,6 @@
 # Legal Chatbot
 
-![Chatbot Home Page Interface](images/homepage .png)
+![Chatbot Home Page Interface](images/homepage.png)
 
 ## Overview
 
