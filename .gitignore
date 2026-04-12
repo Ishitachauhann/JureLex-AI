@@ -1,0 +1,22 @@
+milvus/volumes/
+exported_embeddings/
+precedence_collections_downloadable.py
+frontend/node_modules/
+venv/
+pdf_processing.log
+/case_files
+
+# Python
+venv/
+venv110/
+__pycache__/
+*.pyc
+.env
+
+# Node
+node_modules/
+dist/
+build/
+
+# Mac
+.DS_Store
