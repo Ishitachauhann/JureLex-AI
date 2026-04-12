@@ -4,8 +4,7 @@ precedence_collections_downloadable.py
 frontend/node_modules/
 venv/
 pdf_processing.log
-/case_files
-
+case_files/
 # Python
 venv/
 venv110/
