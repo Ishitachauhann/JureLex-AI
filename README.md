@@ -1,4 +1,4 @@
-# Legal Chatbot
+# JureLex_AI
 
 ![Chatbot Home Page Interface](images/homepage.png)
 
