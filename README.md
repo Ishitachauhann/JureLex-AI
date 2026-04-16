@@ -163,11 +163,11 @@ Summaries and citations
 Insights into judicial interpretation
 
 ## Future Enhancements 
-🔄 Real-time legal database updates
-⚖️ Full integration with Bharatiya Nyaya Sanhita (BNS)
-🌐 Multi-language legal support
-🎙️ Voice-enabled legal assistant
-☁️ Cloud deployment (AWS / GCP) for scalability
+-🔄 Real-time legal database updates
+-⚖️ Full integration with Bharatiya Nyaya Sanhita (BNS)
+-🌐 Multi-language legal support
+-🎙️ Voice-enabled legal assistant
+-☁️ Cloud deployment (AWS / GCP) for scalability
 
 ## Contributing
 Contributions are welcome and appreciated!
