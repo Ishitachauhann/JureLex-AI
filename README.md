@@ -169,14 +169,6 @@ Insights into judicial interpretation
 -🎙️ Voice-enabled legal assistant
 -☁️ Cloud deployment (AWS / GCP) for scalability
 
-## Contributing
-Contributions are welcome and appreciated!
-Fork the repository
-Create a new feature branch
-Commit your changes with clear messages
-Submit a pull request
-Please ensure your code is clean, well-documented, and follows project standards.
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+ MIT License -
