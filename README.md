@@ -1,5 +1,8 @@
 # JureLex_AI - Intelligent Indian Legal Assistant
 
+
+![JureLex AI Homepage](images/homepage.png)
+
 **JureLex AI** is an enterprise-grade, intelligent AI-powered legal assistant designed to simplify and accelerate legal research, document creation, and case analysis within the Indian legal domain.
 
 Leveraging a robust combination of **Retrieval-Augmented Generation (RAG)**, semantic search, and vector-based retrieval, the system delivers highly accurate, context-aware legal responses with official citations rather than generic LLM hallucinations.
