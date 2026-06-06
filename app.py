@@ -40,8 +40,46 @@ if GEMINI_API_KEY:
 else:
     gemini_model = None
 
-# Load embedding model once globally
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Load embedding model conditionally (use local SentenceTransformer if available, fallback to Hugging Face API to save RAM on cloud instances)
+try:
+    from sentence_transformers import SentenceTransformer
+    print("[Embedding] Loading SentenceTransformer locally...")
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    def get_embeddings(texts: list) -> list:
+        return embedding_model.encode(texts, show_progress_bar=False).tolist()
+        
+    def get_embedding(text: str) -> list:
+        return embedding_model.encode([text])[0].tolist()
+except ImportError:
+    print("[Embedding] sentence-transformers not found. Falling back to Hugging Face Inference API.")
+    
+    def get_embeddings(texts: list) -> list:
+        """Generate 384-dim embeddings for a list of texts using Hugging Face Inference API."""
+        api_url = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
+        headers = {}
+        hf_token = os.getenv("HF_TOKEN")
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+            
+        payload = {"inputs": texts, "options": {"wait_for_model": True}}
+        try:
+            response = httpx.post(api_url, headers=headers, json=payload, timeout=25.0)
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list):
+                    if len(texts) == 1 and len(result) > 0 and not isinstance(result[0], list):
+                        return [result]
+                    return result
+            print(f"[Embedding Warning] HF API returned status {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"[Embedding Error] HF API failed: {e}")
+            
+        return [[0.0] * 384 for _ in texts]
+
+    def get_embedding(text: str) -> list:
+        res = get_embeddings([text])
+        return res[0]
 
 
 def ensure_milvus_connection():
@@ -297,8 +335,9 @@ def index_web_docs_async(docs, collection_name):
         filename_list = []
         text_list = []
         vector_list = []
-        for doc in docs:
-            vector = embedding_model.encode([doc["text"]])[0].tolist()
+        texts = [doc["text"] for doc in docs]
+        vectors = get_embeddings(texts)
+        for doc, vector in zip(docs, vectors):
             filename_list.append(doc["filename"])
             text_list.append(doc["text"])
             vector_list.append(vector)
@@ -324,7 +363,7 @@ def search_milvus(collection_name, query_text, top_k=3):
         available_fields = {field.name for field in collection.schema.fields}
         output_fields = [field for field in preferred_fields if field in available_fields]
 
-        query_embedding = embedding_model.encode([query_text])[0].tolist()
+        query_embedding = get_embedding(query_text)
         search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
 
         results = collection.search(
@@ -700,8 +739,8 @@ def upload_file():
         text_list = []
         vector_list = []
         
-        for chunk in chunks:
-            vector = embedding_model.encode([chunk])[0].tolist()
+        vectors = get_embeddings(chunks)
+        for chunk, vector in zip(chunks, vectors):
             filename_list.append(file.filename)
             text_list.append(chunk)
             vector_list.append(vector)

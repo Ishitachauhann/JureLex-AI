@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements_prod.txt .
+RUN pip install --no-cache-dir -r requirements_prod.txt
 
 # Copy backend files
 COPY app.py .
@@ -24,4 +24,4 @@ COPY bns_mapping.py .
 EXPOSE 5050
 
 # Run Flask backend with Gunicorn in production
-CMD ["gunicorn", "--bind", "0.0.0.0:5050", "app:app", "--workers", "1", "--threads", "2", "--timeout", "120"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5050", "app:app", "--workers", "2", "--timeout", "120"]
