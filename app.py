@@ -20,8 +20,11 @@ app = Flask(__name__)
 # Enable CORS for all routes
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-MILVUS_HOST = "localhost"
-MILVUS_PORT = "19530"
+# Configure Milvus parameters from environment
+MILVUS_URI = os.getenv("MILVUS_URI", "")
+MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
 
 LOCAL_MODELS = {
     "Llama": "llama3",
@@ -42,10 +45,15 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def ensure_milvus_connection():
-    """Lazily establish a connection to Milvus, preventing startup boot failures."""
+    """Lazily establish a connection to Milvus, supporting both local and Zilliz Cloud hosts."""
     try:
         if not connections.has_connection("default"):
-            connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
+            if MILVUS_URI:
+                print(f"[Milvus] Connecting to URI: {MILVUS_URI}")
+                connections.connect(alias="default", uri=MILVUS_URI, token=MILVUS_TOKEN)
+            else:
+                print(f"[Milvus] Connecting to host: {MILVUS_HOST}:{MILVUS_PORT}")
+                connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
     except Exception as e:
         print(f"[Milvus Connection Warning] Failed lazy connection: {e}")
 

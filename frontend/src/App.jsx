@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5050';
+
 // Main App Component
 const App = () => {
   const [currentView, setCurrentView] = useState('home');
@@ -696,7 +698,7 @@ const IPCFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5050/query/ipc', {
+      const response = await fetch(`${BACKEND_URL}/query/ipc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -797,7 +799,7 @@ const PrecedenceFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5050/query/legal', {
+      const res = await fetch(`${BACKEND_URL}/query/legal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -874,7 +876,7 @@ const DocumentCreator = ({ onAddMessage, activeModel, activeLanguage }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5050/generate_contract', {
+      const response = await fetch(`${BACKEND_URL}/generate_contract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -978,7 +980,7 @@ const KnowledgeBaseUploader = () => {
     formData.append('type', dbType);
 
     try {
-      const response = await fetch('http://localhost:5050/api/upload', {
+      const response = await fetch(`${BACKEND_URL}/api/upload`, {
         method: 'POST',
         body: formData,
       });
