@@ -11,3 +11,4 @@ httpx==0.27.0
 beautifulsoup4==4.12.3
 gunicorn==26.0.0
 setuptools<82
+marshmallow<4

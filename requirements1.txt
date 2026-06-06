@@ -23,4 +23,3 @@ langchain-community
 langchain-core
 setuptools<82
 beautifulsoup4
-gunicorn
