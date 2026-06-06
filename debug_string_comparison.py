@@ -1,3 +1,5 @@
+# debug_string_comparison.py
+
 #!/usr/bin/env python3
 """
 Debug script to find exact differences between retrieved and expected docs

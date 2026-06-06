@@ -1,174 +1,156 @@
-# JureLex_AI
+# JureLex_AI - Intelligent Indian Legal Assistant
 
-![Chatbot Home Page Interface](images/homepage.png)
+**JureLex AI** is an enterprise-grade, intelligent AI-powered legal assistant designed to simplify and accelerate legal research, document creation, and case analysis within the Indian legal domain.
 
-## Overview
+Leveraging a robust combination of **Retrieval-Augmented Generation (RAG)**, semantic search, and vector-based retrieval, the system delivers highly accurate, context-aware legal responses with official citations rather than generic LLM hallucinations.
 
-🚀 Overview
-JureLex AI is an intelligent, AI-powered legal assistant designed to simplify and accelerate legal research, document creation, and case analysis within the Indian legal domain.
-Leveraging a robust combination of Retrieval-Augmented Generation (RAG), semantic search, and vector-based retrieval, the system delivers highly accurate, context-aware legal responses rather than generic chatbot outputs.
-At its core, the platform utilizes Milvus as a high-performance vector database for indexing and retrieving legal documents, while Ollama (Llama 3.2 – 1B parameters) powers the natural language understanding and response generation. This integration enables the system to interpret complex legal queries and generate structured, meaningful outputs in real time.
-The application features a modern and responsive user interface built with React and Vite, seamlessly connected to a scalable Flask-based backend, ensuring efficient processing and smooth user interaction.
-💡 Built as a production-oriented AI system, combining cutting-edge NLP techniques with real-world legal use cases.
+---
 
-The frontend is developed using React and Vite, while the backend is built using Flask. 
+##  Features
 
-## Features
+### ⚖️ Smart BNS-to-IPC Statutory Mapping
+*   **BNS Transition Alerts**: Tracks transitions between the legacy Indian Penal Code (IPC) and the new Bharatiya Nyaya Sanhita (BNS).
+*   **Interactive Comparison Cards**: Automatically detects penal sections in queries and renders comparison layouts mapping old and new section numbers side-by-side.
 
-1. **Smart IPC/BNS Legal Intelligence**: Understands and interprets user queries about Indian penal laws using natural language processing
-Dynamically retrieves the most relevant legal sections with clear, concise explanations
-Bridges the gap between IPC and BNS frameworks, ensuring modern legal relevance
-2. **📄 AI-Powered Legal Document Generation**: The chatbot can help in drafting various legal documents, such as contracts, agreements, and notices, by guiding the user through the necessary inputs.
-3. **⚖️ Advanced Case Law & Precedent Discovery**: Performs intelligent retrieval of relevant judicial precedents from legal datasets
-Provides case summaries, citations, and interpretative insights
-Helps users understand legal reasoning, applicability, and real-world implications
+### Real-time Knowledge Ingestion (No-Code Updates)
+*   **Dynamic Document Uploader**: Ingest PDF files, scanned images, or TXT records directly through the UI.
+*   **Automated OCR Fallback**: Integrated `pytesseract` to extract text from scanned documents or image attachments automatically.
+*   **Instant RAG Update**: Chunks text, computes embeddings using `SentenceTransformer (all-MiniLM-L6-v2)`, and inserts them into the Milvus vector database in real-time.
 
+###  Multi-Language Translation
+*   **Regional Language Queries**: Fully translate queries in **Hindi (हिन्दी), Tamil (தமிழ்), Telugu (తెలుగు), Bengali (বাঙালি), or Marathi (मराठी)**.
+*   **Bidirectional Translators**: Translates regional input into English for semantic vector database retrieval and translates the generated English answer back into the query's native tongue.
 
-## Tech Stack
+###  Hands-Free Dictation & Voice Narration
+*   **Speech-to-Text Input**: Use the browser's native Web Speech API to transcribe user voice inputs in real-time.
+*   **Polished Female Narration**: Features a customized TTS selector prioritizing clear, premium female voices (like `Samantha`, `Sangeeta`, `Zira`) while blacklisting robotic male fallbacks (like `Alex` or `Fred`).
 
-- **Frontend**: React, Vite
-- **Backend**: Flask
-- **Semantic Search**: Retrieval-Augmented Generation (RAG) with Milvus vector database
-- **LLM**: Ollama (Llama 3.2 with 1B parameters)
+### ⚡ Performance & Failover Architecture
+*   **Model Routing Selector**: Select Llama 3, Phi, Mistral, or Gemini on-the-fly. The backend runs only the selected model, preventing local CPU/GPU thrashing.
+*   **Lazy DB Initializer**: Prevents Flask boot crashes if Milvus is starting up or temporarily offline.
 
-## ⚙️ How It Works
+###  Production-Ready Cloud Deployment
+*   **Docker Containerization**: Multi-container setup containing an Nginx frontend container and an OCR-configured Flask backend.
+*   **Nginx Reverse Proxy**: Configured to route backend API requests smoothly and prevent CORS blocks.
 
-🔍 Intelligent Query Processing
-The user submits a query through the frontend interface, which is seamlessly routed to the Flask backend. The system preprocesses and structures the query to capture intent and context effectively.
+---
 
-🧠 Semantic Retrieval via Vector Search
-The processed query is transformed into embeddings and matched against a Milvus-powered vector database. Using advanced semantic search, the system retrieves the most relevant legal information — including IPC/BNS sections, case precedents, and document data.
+##  Tech Stack
 
-🤖 Context-Aware LLM Generation
-The retrieved context is passed to the Ollama-powered LLM (Llama 3.2), which synthesizes the information and generates a coherent, accurate, and legally meaningful response tailored to the user’s query.
+*   **Frontend**: React (Vite), Tailwind CSS, Lucide React, React Markdown
+*   **Backend**: Flask, PyMuPDF (PDF parsing), Tesseract (OCR engine)
+*   **Vector Store**: Milvus Vector Database
+*   **Semantic Model**: `SentenceTransformer (all-MiniLM-L6-v2)` (384 dimensions)
+*   **LLM Integration**: Local Ollama (`llama3`, `phi`, `mistral`) & Gemini API Fallbacks
 
-💻 Seamless Frontend Delivery
-The final response is delivered back to the React frontend and presented in a clean, structured, and user-friendly format, ensuring clarity and ease of understanding.
+---
 
-## Requirements
+##  Project Structure
 
-- Python 3.8 or higher
-- Node.js (for React and Vite)
-- Milvus (for vector storage)
-- Ollama LLM
-- Flask
- 
-## Project Structure
+```text
 JureLex_AI/
-│
-├── backend/              # Flask backend
-├── frontend/             # React frontend
-├── case_files/           # Legal case PDFs
-├── images/               # UI & demo assets
-├── create_collections.py
-├── precedence_collections.py
-├── requirements.txt
-└── README.md
-## Setup
+├── app.py                     # Main Flask backend application (server)
+├── bns_mapping.py             # IPC-to-BNS bidirectional translation dictionary & parser
+├── create_collections.py      # Script to initialize Milvus vector database collections
+├── precedence_collections.py  # Script to index precedence legal documents
+├── requirements.txt           # Python dependency manifest
+├── Dockerfile.backend         # Production Docker recipe for Flask backend
+├── docker-compose.prod.yml    # Production Compose orchestration config
+├── venv110/                   # Local Python virtual environment
+└── frontend/                  # React source files
+    ├── src/                   # React components
+    │   ├── App.jsx            # Main app container containing chat tabs & voice engines
+    │   └── main.jsx           # App entry point
+    ├── package.json           # Node project manifest
+    ├── Dockerfile.frontend    # Docker recipe for frontend Nginx bundle
+    └── nginx.conf             # Production Nginx reverse proxy configuration
+```
 
-1. Clone the repository:
+---
 
-    ```bash
-    git clone https://github.com/Ishitachauhann/JureLex_AI.git cd JureLex_AI
-    ```
+##  Setup & Installation
 
-2. Create and activate a virtual environment:
+### Option 1: Local Development Setup
 
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    ```
+#### 1. Clone the repository
+```bash
+git clone https://github.com/Ishitachauhann/JureLex_AI.git
+cd JureLex_AI
+```
 
-3. Install backend dependencies:
+#### 2. Create and activate a virtual environment
+```bash
+python3 -m venv venv110
+source venv110/bin/activate  # On Windows, use `venv110\Scripts\activate`
+```
 
-    ```bash
-    pip install -r requirements.txt
-    ```
-4. If the previous one doesnt work and if you face anyy dependancy issues
+#### 3. Install backend dependencies
+Make sure you have system-level dependencies for PyMuPDF and OCR:
+```bash
+# On macOS (using Homebrew)
+brew install tesseract
 
-    ```bash
-    pip install -r requirements1.txt
-    ```
+# On Debian/Ubuntu
+sudo apt-get install tesseract-ocr
+```
+Then run:
+```bash
+pip install -r requirements.txt
+```
 
-### Milvus Setup
-    ```
- Run the create_collections.py file 2 times, once with "./IPC.pdf" as the path and once more with "./documentforms.pdf" as the path   
+#### 4. Configure Milvus Collections
+Ensure your Milvus database is running locally, then initialize the database structures:
+```bash
+# Create IPC & Document Template collections
+python create_collections.py
 
-1. Run the script to make collections on the vector database.
-    ```bash
-    create_collections.py
-    ```
-2. Then run precedance_collections.py file with "./case_files" as the path 
+# Create Precedence legal case files database
+python precedence_collections.py
+```
 
-#### By doing steps 1 and 2:
-Converts legal data → embeddings
-Stores them in Milvus 
+#### 5. Run the Backend Server
+Start the Flask backend from the project root:
+```bash
+python app.py
+```
+The server runs on `http://localhost:5050` (bound to `0.0.0.0` for container compatibility).
 
-### Backend Setup (Flask)
+#### 6. Run the Frontend Server
+Open a new terminal session, navigate to the frontend folder, and start Vite:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The client dashboard will be available at `http://localhost:5173`.
 
-1. Start the Flask backend:
+---
 
-    ```bash
-    cd backend
-    python app.py
-    ```
+### Option 2: Production Docker Compose Setup
 
-   The backend server will be running on `http://localhost:5173`.
+Spin up the entire application (Frontend + Backend + Reverse Proxy + OCR services) in one command:
 
-### Frontend Setup (React + Vite)
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+*   **Frontend dashboard**: `http://localhost:80` (or `http://localhost`)
+*   **Backend endpoints**: Routed internally by Nginx via `http://localhost/api/...`
 
-1. Install frontend dependencies:
+---
 
-    ```bash
-    cd frontend
-    npm install
-    ```
+## Ingestion & Querying Workflow
 
-2. Run the frontend development server:
+To ask questions about a specific document:
+1. Navigate to the **Ingest** tab in the top navigation bar.
+2. Select the **Target Collection**:
+   * *Precedence Collection*: For judgment PDFs and case records.
+   * *Criminal Code Collection*: For statutory codes (IPC/BNS).
+   * *Drafting Collection*: For contract templates.
+3. Drag and drop your file and click **Index Document**.
+4. Go to the matching chat tab (**Judicial Precedence Finder**, **IPC / BNS Finder**, or **Legal Drafting Suite**) and submit your question. The system will retrieve relevant chunks directly from the uploaded file to formulate the response.
 
-    ```bash
-    npm run dev
-    ```
+---
 
-   The frontend will be available at `http://localhost:5173`.
+## ⚖️ License
 
-## Usage
-
-- **IPC Section Queries**: To inquire about a specific section of the Indian Penal Code, simply type the section number or describe your query. For example: “What is Section 302 of the IPC?” The system retrieves and presents:
-Relevant legal sections
-Clear and concise explanations
-Contextual understanding of the provision
-
-- **Legal Document Creation**: TGenerate structured legal documents such as:
-Agreements
-Contracts
-Affidavits
-Provide a detailed prompt to ensure accuracy and completeness
-Example: Rental Agreement Input Should Include:
-Names of involved parties (Landlord & Tenant)
-Property address
-Terms (rent, deposit, etc.)
-Duration of agreement
-Special clauses (maintenance, restrictions, etc.)
-✔ Output:
-Professionally formatted
-Ready-to-use and editable document
-
-- **Precedent Search**: Search for relevant legal precedents by describing:
-Case facts
-Legal issue
-The system returns:
-Relevant case laws
-Summaries and citations
-Insights into judicial interpretation
-
-## Future Enhancements 
--🔄 Real-time legal database updates
--⚖️ Full integration with Bharatiya Nyaya Sanhita (BNS)
--🌐 Multi-language legal support
--🎙️ Voice-enabled legal assistant
--☁️ Cloud deployment (AWS / GCP) for scalability
-
-## License
-
- MIT License -
+This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
