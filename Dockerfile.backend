@@ -24,4 +24,4 @@ COPY bns_mapping.py .
 EXPOSE 5050
 
 # Run Flask backend with Gunicorn in production
-CMD ["gunicorn", "--bind", "0.0.0.0:5050", "app:app", "--workers", "2", "--timeout", "120"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5050", "app:app", "--workers", "1", "--threads", "2", "--timeout", "120"]
