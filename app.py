@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymilvus import connections, Collection, FieldSchema, DataType, CollectionSchema, utility
-from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 import os
 import json
