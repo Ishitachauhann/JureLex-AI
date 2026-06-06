@@ -132,11 +132,11 @@ const Header = ({ currentView, onNavigate, activeModel, setActiveModel, activeLa
               onChange={(e) => setActiveModel(e.target.value)}
               className="bg-transparent text-slate-200 text-xs font-medium focus:outline-none cursor-pointer pr-1"
             >
-              <option value="Llama">Llama 3.2</option>
-              <option value="Phi">Phi 2.7B</option>
-              <option value="Mistral">Mistral 7B</option>
-              <option value="Gemini">Gemini 1.5</option>
-              <option value="All Models">All Models</option>
+              <option value="Llama" className="bg-slate-900 text-slate-200">Llama 3.2</option>
+              <option value="Phi" className="bg-slate-900 text-slate-200">Phi 2.7B</option>
+              <option value="Mistral" className="bg-slate-900 text-slate-200">Mistral 7B</option>
+              <option value="Gemini" className="bg-slate-900 text-slate-200">Gemini 1.5</option>
+              <option value="All Models" className="bg-slate-900 text-slate-200">All Models</option>
             </select>
           </div>
 
@@ -148,12 +148,12 @@ const Header = ({ currentView, onNavigate, activeModel, setActiveModel, activeLa
               onChange={(e) => setActiveLanguage(e.target.value)}
               className="bg-transparent text-slate-200 text-xs font-medium focus:outline-none cursor-pointer pr-1"
             >
-              <option value="English">English</option>
-              <option value="Hindi">हिंदी (Hindi)</option>
-              <option value="Tamil">தமிழ் (Tamil)</option>
-              <option value="Telugu">తెలుగు (Telugu)</option>
-              <option value="Bengali">বাংলা (Bengali)</option>
-              <option value="Marathi">मराठी (Marathi)</option>
+              <option value="English" className="bg-slate-900 text-slate-200">English</option>
+              <option value="Hindi" className="bg-slate-900 text-slate-200">हिंदी (Hindi)</option>
+              <option value="Tamil" className="bg-slate-900 text-slate-200">தமிழ் (Tamil)</option>
+              <option value="Telugu" className="bg-slate-900 text-slate-200">తెలుగు (Telugu)</option>
+              <option value="Bengali" className="bg-slate-900 text-slate-200">বাংলা (Bengali)</option>
+              <option value="Marathi" className="bg-slate-900 text-slate-200">मराठी (Marathi)</option>
             </select>
           </div>
         </div>
@@ -1022,9 +1022,9 @@ const KnowledgeBaseUploader = () => {
             onChange={(e) => setDbType(e.target.value)}
             className="w-full bg-slate-900 text-slate-200 border border-slate-800 rounded-lg p-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-600"
           >
-            <option value="precedence">Precedence Collection (Judgments)</option>
-            <option value="document">Drafting Collection (Templates)</option>
-            <option value="ipc">Criminal Code Collection (IPC/BNS)</option>
+            <option value="precedence" className="bg-slate-900 text-slate-200">Precedence Collection (Judgments)</option>
+            <option value="document" className="bg-slate-900 text-slate-200">Drafting Collection (Templates)</option>
+            <option value="ipc" className="bg-slate-900 text-slate-200">Criminal Code Collection (IPC/BNS)</option>
           </select>
         </div>
         <div className="flex flex-col justify-end">
