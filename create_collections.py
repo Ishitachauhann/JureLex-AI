@@ -35,10 +35,19 @@ embedding_function = SentenceTransformerEmbeddings()
 print("Generating embeddings...")
 embeddings = embedding_function.embed_documents([chunk.page_content for chunk in chunks])
 
+import os
 # ---------- Connect to Milvus ----------
-MILVUS_HOST = "localhost"
-MILVUS_PORT = "19530"
-connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT, secure=False)
+MILVUS_URI = os.getenv("MILVUS_URI", "")
+MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+
+if MILVUS_URI:
+    print(f"Connecting to Zilliz Cloud at {MILVUS_URI}...")
+    connections.connect(alias="default", uri=MILVUS_URI, token=MILVUS_TOKEN)
+else:
+    print(f"Connecting to local Milvus at {MILVUS_HOST}:{MILVUS_PORT}...")
+    connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT, secure=False)
 print("Connected to Milvus successfully!")
 
 # ---------- Prepare Documents with Metadata ----------
@@ -53,7 +62,7 @@ vector_store = Milvus.from_documents(
     documents=docs_with_metadata,
     embedding=embedding_function,
     collection_name=COLLECTION_NAME,
-    connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+    connection_args={"uri": MILVUS_URI, "token": MILVUS_TOKEN} if MILVUS_URI else {"host": MILVUS_HOST, "port": MILVUS_PORT},
     index_params={"index_type": "FLAT"}  # FLAT index ensures accuracy
 )
 

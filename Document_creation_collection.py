@@ -12,7 +12,18 @@ INPUT_FILES = ["documentforms.pdf", "legalform1.pdf", "legalform1.webp"]
 COLLECTION_NAME = "Document_Creation_collection"
 EMBEDDING_DIM = 384
 
-connections.connect(alias="default", host="localhost", port="19530")
+# Configure Milvus parameters from environment
+MILVUS_URI = os.getenv("MILVUS_URI", "")
+MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
+
+if MILVUS_URI:
+    print(f"Connecting to Zilliz Cloud at {MILVUS_URI}...")
+    connections.connect(alias="default", uri=MILVUS_URI, token=MILVUS_TOKEN)
+else:
+    print(f"Connecting to local Milvus at {MILVUS_HOST}:{MILVUS_PORT}...")
+    connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
 
 if utility.has_collection(COLLECTION_NAME):
     print(f"Dropping existing collection: {COLLECTION_NAME}")

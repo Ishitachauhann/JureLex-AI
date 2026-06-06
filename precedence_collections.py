@@ -28,8 +28,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Milvus connection parameters
-MILVUS_HOST = "localhost"
-MILVUS_PORT = "19530"
+MILVUS_URI = os.getenv("MILVUS_URI", "")
+MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
 COLLECTION_NAME = "Precedence_collection"
 
 # Export parameters
@@ -44,7 +46,12 @@ os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
 # Connect to Milvus
 try:
-    connections.connect(host=MILVUS_HOST, port=MILVUS_PORT)
+    if MILVUS_URI:
+        logger.info(f"Connecting to Zilliz Cloud at {MILVUS_URI}...")
+        connections.connect(alias="default", uri=MILVUS_URI, token=MILVUS_TOKEN)
+    else:
+        logger.info(f"Connecting to local Milvus at {MILVUS_HOST}:{MILVUS_PORT}...")
+        connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
     logger.info("Successfully connected to Milvus")
 except Exception as e:
     logger.error(f"Failed to connect to Milvus: {e}")
