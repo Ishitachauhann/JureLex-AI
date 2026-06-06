@@ -54,10 +54,12 @@ Leveraging a robust combination of **Retrieval-Augmented Generation (RAG)**, sem
 JureLex_AI/
 ├── app.py                     # Main Flask backend application (server)
 ├── bns_mapping.py             # IPC-to-BNS bidirectional translation dictionary & parser
-├── create_collections.py      # Script to initialize Milvus vector database collections
-├── precedence_collections.py  # Script to index precedence legal documents
-├── requirements.txt           # Python dependency manifest
-├── Dockerfile.backend         # Production Docker recipe for Flask backend
+├── create_collections.py      # Script to initialize local Milvus database collections
+├── precedence_collections.py  # Script to index local precedence legal documents
+├── populate_zilliz.py         # Script to initialize & upload all data to Zilliz Cloud database
+├── requirements.txt           # Local Python dependency manifest (with PyTorch & local models)
+├── requirements_prod.txt      # Production Python dependency manifest (lightweight, no PyTorch)
+├── Dockerfile                 # Production Docker recipe for Flask backend (uses requirements_prod.txt)
 ├── docker-compose.prod.yml    # Production Compose orchestration config
 ├── venv110/                   # Local Python virtual environment
 └── frontend/                  # React source files
@@ -102,14 +104,21 @@ pip install -r requirements.txt
 ```
 
 #### 4. Configure Milvus Collections
-Ensure your Milvus database is running locally, then initialize the database structures:
-```bash
-# Create IPC & Document Template collections
-python create_collections.py
-
-# Create Precedence legal case files database
-python precedence_collections.py
-```
+*   **For Local Development** (using a local Milvus instance):
+    ```bash
+    # Create IPC & Document Template collections
+    python create_collections.py
+    
+    # Create Precedence legal case files database
+    python precedence_collections.py
+    ```
+*   **For Cloud Production** (using Zilliz Cloud):
+    Ensure your Zilliz URI and token variables are set in your environment:
+    ```bash
+    export MILVUS_URI="https://in03-xxxxxxxx.cloud.zilliz.com"
+    export MILVUS_TOKEN="username:password"
+    python populate_zilliz.py
+    ```
 
 #### 5. Run the Backend Server
 Start the Flask backend from the project root:
