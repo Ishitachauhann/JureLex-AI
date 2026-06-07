@@ -16,6 +16,7 @@ const App = () => {
   const [chatHistory, setChatHistory] = useState([]);
   const [activeModel, setActiveModel] = useState('Llama');
   const [activeLanguage, setActiveLanguage] = useState('English');
+  const [selectedSourceDoc, setSelectedSourceDoc] = useState(null);
 
   const addMessageToHistory = (message, response, type) => {
     setChatHistory(prev => [...prev, { message, response, type, timestamp: new Date() }]);
@@ -33,6 +34,7 @@ const App = () => {
             onAddMessage={addMessageToHistory} 
             activeModel={activeModel} 
             activeLanguage={activeLanguage} 
+            onViewSource={setSelectedSourceDoc}
           />
         );
       case 'precedence':
@@ -41,6 +43,13 @@ const App = () => {
             onAddMessage={addMessageToHistory} 
             activeModel={activeModel} 
             activeLanguage={activeLanguage} 
+            onViewSource={setSelectedSourceDoc}
+          />
+        );
+      case 'analysis':
+        return (
+          <DocumentAnalyzer 
+            activeModel={activeModel}
           />
         );
       case 'document':
@@ -73,6 +82,13 @@ const App = () => {
       <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
         {renderCurrentView()}
       </main>
+      {selectedSourceDoc && (
+        <SourceViewerDrawer 
+          doc={selectedSourceDoc} 
+          onClose={() => setSelectedSourceDoc(null)} 
+          query={selectedSourceDoc.queryText || ''} 
+        />
+      )}
       <footer className="py-6 border-t border-slate-800 text-center text-xs text-slate-500 bg-slate-950">
         &copy; {new Date().getFullYear()} JureLex AI - Legal Intelligence Suite. All rights reserved.
       </footer>
@@ -86,6 +102,7 @@ const Header = ({ currentView, onNavigate, activeModel, setActiveModel, activeLa
     { id: 'home', label: 'Home', icon: Home },
     { id: 'ipc', label: 'IPC / BNS', icon: Scale },
     { id: 'precedence', label: 'Precedence', icon: Search },
+    { id: 'analysis', label: 'Doc Analyzer', icon: FileCheck },
     { id: 'document', label: 'Drafting', icon: FileText },
     { id: 'upload', label: 'Ingest', icon: UploadCloud },
     { id: 'history', label: 'History', icon: MessageCircle },
@@ -439,7 +456,7 @@ const UserMessage = ({ message }) => (
 );
 
 // Bot Message with proper Markdown + TTS + BNS convert alert
-const BotMessage = ({ message, citations, documents, bnsTransitions, activeLanguage }) => {
+const BotMessage = ({ message, citations, documents, bnsTransitions, agentLogs, activeLanguage, onViewSource }) => {
   const [copied, setCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -610,6 +627,27 @@ const BotMessage = ({ message, citations, documents, bnsTransitions, activeLangu
             <ReactMarkdown>{message}</ReactMarkdown>
           </div>
 
+          {/* Agent execution logs */}
+          {agentLogs && agentLogs.length > 0 && (
+            <details className="mt-4 bg-slate-950/45 border border-slate-850 rounded-xl p-3 group">
+              <summary className="text-[10px] font-bold text-slate-400 group-open:text-blue-405 uppercase tracking-wider cursor-pointer list-none flex items-center justify-between">
+                <span className="flex items-center">
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5 text-indigo-400 animate-pulse" />
+                  Agentic Execution Trace
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 transform group-open:rotate-90 transition-transform text-slate-505" />
+              </summary>
+              <div className="mt-3 relative pl-4 border-l border-slate-800 space-y-3">
+                {agentLogs.map((log, idx) => (
+                  <div key={idx} className="text-xs">
+                    <span className="font-bold text-blue-405 block mb-0.5">{log.agent}</span>
+                    <span className="text-slate-300 font-light leading-relaxed">{log.message}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
         </div>
 
         {/* Citations panel */}
@@ -643,9 +681,17 @@ const BotMessage = ({ message, citations, documents, bnsTransitions, activeLangu
             </h4>
             <div className="grid gap-2">
               {documents.map((doc, index) => (
-                <div key={index} className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-850 rounded-xl p-3.5 transition-colors">
+                <div 
+                  key={index} 
+                  onClick={() => onViewSource && onViewSource({ ...doc, queryText: message })}
+                  className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-850 hover:border-blue-500/35 rounded-xl p-3.5 transition-all cursor-pointer group"
+                  title="Click to view full text segment in Drawer"
+                >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-slate-300">{doc.filename || 'Statutory Code'}</span>
+                    <span className="text-xs font-bold text-slate-300 group-hover:text-blue-400 transition-colors flex items-center">
+                      <BookOpen className="w-3 h-3 mr-1 text-slate-500 group-hover:text-blue-400" />
+                      {doc.filename || 'Statutory Code'}
+                    </span>
                     <div className="flex items-center space-x-2">
                       <span className="text-[10px] text-slate-500 font-medium">
                         Similarity: {doc.score ? (doc.score * 100).toFixed(0) : 'N/A'}%
@@ -670,7 +716,7 @@ const BotMessage = ({ message, citations, documents, bnsTransitions, activeLangu
 };
 
 // IPC Finder Component
-const IPCFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
+const IPCFinder = ({ onAddMessage, activeModel, activeLanguage, onViewSource }) => {
   const [messages, setMessages] = useState([
     { type: 'bot', content: 'Hello! I am ready. Ask me any queries about Indian criminal laws. I will automatically match the legal codes to the legacy IPC as well as the new **Bharatiya Nyaya Sanhita (BNS)**.' }
   ]);
@@ -717,7 +763,8 @@ const IPCFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
           content: activeModel === 'All Models' ? `### [${model} Response]\n\n${text}` : text,
           citations: extractCitations(text),
           documents: data.retrieved_docs || [],
-          bnsTransitions: data.bns_transitions || []
+          bnsTransitions: data.bns_transitions || [],
+          agentLogs: data.agent_logs || []
         }));
 
         setMessages(prev => [...prev, ...replies]);
@@ -755,15 +802,21 @@ const IPCFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
               citations={message.citations}
               documents={message.documents}
               bnsTransitions={message.bnsTransitions}
+              agentLogs={message.agentLogs}
               activeLanguage={activeLanguage}
+              onViewSource={onViewSource}
             />
           )}
         </div>
       ))}
       {loading && (
-        <div className="flex items-center space-x-2 text-slate-500 text-xs">
-          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-          <span>Searching criminal code indexes...</span>
+        <div className="flex items-start space-x-3 mt-4 animate-pulse">
+          <div className="bg-slate-800/80 w-8 h-8 border border-slate-700 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
+            <Bot className="w-4 h-4 text-blue-400" />
+          </div>
+          <div className="flex-1">
+            <AgentThinkingStepper />
+          </div>
         </div>
       )}
     </ChatInterface>
@@ -771,7 +824,7 @@ const IPCFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
 };
 
 // Precedence Finder Component
-const PrecedenceFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
+const PrecedenceFinder = ({ onAddMessage, activeModel, activeLanguage, onViewSource }) => {
   const [messages, setMessages] = useState([
     { type: 'bot', content: 'Describe the facts of your case. I will retrieve case citations, rulings, and summaries of legal precedents matching your description.' }
   ]);
@@ -815,7 +868,8 @@ const PrecedenceFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
           type: 'bot',
           content: activeModel === 'All Models' ? `### [${model} Response]\n\n${text}` : text,
           citations: extractCitations(text),
-          documents: data.retrieved_docs || []
+          documents: data.retrieved_docs || [],
+          agentLogs: data.agent_logs || []
         }));
 
         setMessages(prev => [...prev, ...botMessages]);
@@ -849,15 +903,21 @@ const PrecedenceFinder = ({ onAddMessage, activeModel, activeLanguage }) => {
               message={message.content}
               citations={message.citations}
               documents={message.documents}
+              agentLogs={message.agentLogs}
               activeLanguage={activeLanguage}
+              onViewSource={onViewSource}
             />
           )}
         </div>
       ))}
       {loading && (
-        <div className="flex items-center space-x-2 text-slate-500 text-xs">
-          <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
-          <span>Searching precedent archives...</span>
+        <div className="flex items-start space-x-3 mt-4 animate-pulse">
+          <div className="bg-slate-800/80 w-8 h-8 border border-slate-700 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
+            <Bot className="w-4 h-4 text-blue-400" />
+          </div>
+          <div className="flex-1">
+            <AgentThinkingStepper />
+          </div>
         </div>
       )}
     </ChatInterface>
@@ -1154,6 +1214,480 @@ const ChatHistory = ({ history, onClear }) => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- New Components for Drawer, Stepper, and Document Analysis ---
+
+const SourceViewerDrawer = ({ doc, onClose, query }) => {
+  const drawerRef = useRef(null);
+
+  // Close on escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Click outside to close
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  // Highlight search terms from query
+  const getHighlightedText = (text, queryStr) => {
+    if (!queryStr) return text;
+    // Extract keywords of 4+ characters from query to highlight
+    const keywords = queryStr
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 3 && !['about', 'under', 'court', 'section', 'what', 'legal', 'law', 'indian'].includes(w));
+      
+    if (keywords.length === 0) return text;
+    
+    try {
+      const pattern = new RegExp(`\\b(${keywords.join('|')})\\b`, 'gi');
+      const parts = text.split(pattern);
+      return parts.map((part, idx) => 
+        pattern.test(part) ? (
+          <mark key={idx} className="bg-amber-500/35 text-white px-0.5 rounded font-medium">
+            {part}
+          </mark>
+        ) : part
+      );
+    } catch (e) {
+      return text;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300">
+      <div 
+        ref={drawerRef}
+        className="w-full max-w-lg bg-slate-900 border-l border-slate-800 h-full flex flex-col shadow-2xl relative animate-slide-in"
+      >
+        {/* Drawer Header */}
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/80 backdrop-blur-sm">
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-white tracking-wide truncate max-w-[280px]">
+              {doc.filename || 'Source Document'}
+            </h3>
+            <span className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider">
+              Legal Context Viewer
+            </span>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-lg transition-all"
+            title="Close Drawer"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Drawer Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="bg-slate-955/40 border border-slate-850 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wider font-bold">
+              <span>Retrieval Match Strength</span>
+              <span>{doc.score ? (doc.score * 100).toFixed(1) : 'N/A'}%</span>
+            </div>
+            <div className="w-full bg-slate-850 rounded-full h-1.5 overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full"
+                style={{ width: `${doc.score ? doc.score * 100 : 0}%` }}
+              ></div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Document Segment Text</h4>
+            <div className="bg-slate-950/20 border border-slate-850 rounded-xl p-5 text-sm text-slate-200 leading-relaxed font-light font-sans whitespace-pre-wrap select-text">
+              {getHighlightedText(doc.text, query)}
+            </div>
+          </div>
+        </div>
+
+        {/* Drawer Footer */}
+        <div className="p-4 border-t border-slate-800 bg-slate-955/30 text-center">
+          <a
+            href={`https://indiankanoon.org/search/?formInput=${encodeURIComponent(doc.filename || doc.text.substring(0, 30))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all inline-block hover:-translate-y-0.5"
+          >
+            Search on Indian Kanoon
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+const AgentThinkingStepper = () => {
+  const steps = [
+    { name: 'Research Agent', desc: 'Analyzing query & searching collections...' },
+    { name: 'Citation Agent', desc: 'Auditing retrieved contexts & references...' },
+    { name: 'Verification Agent', desc: 'Verifying IPC ⇄ BNS penal reform transitions...' },
+    { name: 'Final Response Agent', desc: 'Synthesizing final legal memorandum...' }
+  ];
+
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    // Simulate progression through steps while request is loading
+    const interval = setInterval(() => {
+      setActiveStep(prev => {
+        if (prev < steps.length - 1) {
+          return prev + 1;
+        }
+        return prev;
+      });
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="bg-slate-900/40 border border-slate-850 rounded-2xl p-6 space-y-4 max-w-lg shadow-inner">
+      <div className="flex items-center space-x-2">
+        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Multi-Agent Workflow Active</span>
+      </div>
+      <div className="relative pl-6 border-l border-slate-800 space-y-6">
+        {steps.map((step, idx) => {
+          const isCompleted = idx < activeStep;
+          const isRunning = idx === activeStep;
+          const isWaiting = idx > activeStep;
+
+          return (
+            <div key={idx} className="relative">
+              {/* Bullet indicator */}
+              <div className={`absolute -left-[31px] top-0.5 w-4.5 h-4.5 rounded-full border flex items-center justify-center transition-all ${
+                isCompleted 
+                  ? 'bg-emerald-500 border-emerald-400 text-white' 
+                  : isRunning 
+                    ? 'bg-blue-600 border-blue-400 text-white animate-pulse' 
+                    : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}>
+                {isCompleted ? (
+                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                ) : (
+                  <span className="text-[9px] font-bold">{idx + 1}</span>
+                )}
+              </div>
+
+              {/* Step Info */}
+              <div className="space-y-0.5">
+                <h4 className={`text-xs font-bold transition-colors ${
+                  isRunning ? 'text-blue-400' : isCompleted ? 'text-slate-350' : 'text-slate-500'
+                }`}>
+                  {step.name}
+                </h4>
+                <p className={`text-[11px] font-light leading-relaxed transition-colors ${
+                  isRunning ? 'text-slate-300' : isCompleted ? 'text-slate-400' : 'text-slate-650'
+                }`}>
+                  {step.desc}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+
+const DocumentAnalyzer = () => {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [analysis, setAnalysis] = useState(null);
+  const [openClauseIdx, setOpenClauseIdx] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleDragOver = (e) => e.preventDefault();
+  
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setFile(e.target.files[0]);
+    }
+  };
+
+  const triggerSelectFile = () => fileInputRef.current.click();
+
+  const handleAnalyze = async () => {
+    if (!file) return;
+    setLoading(true);
+    setStatusMsg('Extracting text and performing structured legal analysis...');
+    setAnalysis(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/analyze`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setAnalysis(data);
+        setStatusMsg('');
+      } else {
+        setStatusMsg(data.error || 'Failed to analyze document.');
+      }
+    } catch (error) {
+      setStatusMsg('Network connection failure. Verify Flask server is active.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getSeverityStyles = (severity) => {
+    switch (severity?.toLowerCase()) {
+      case 'high': return 'bg-red-500/10 border-red-500/20 text-red-400';
+      case 'medium': return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+      default: return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
+    }
+  };
+
+  return (
+    <div className="space-y-8 max-w-4xl mx-auto">
+      
+      {/* Intro Header */}
+      <div className="text-center max-w-2xl mx-auto space-y-2">
+        <h2 className="text-2xl font-black text-white flex items-center justify-center tracking-wide">
+          <FileCheck className="w-6 h-6 mr-2 text-blue-400" />
+          Legal Document Analyzer
+        </h2>
+        <p className="text-slate-400 text-xs font-light leading-relaxed">
+          Upload any contract, template, PDF, or DOCX. JureLex will automatically parse the document structure, extract key clauses, flag severe risks, compile critical due dates, and map precedents.
+        </p>
+      </div>
+
+      {!analysis && (
+        <div className="bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-2xl space-y-6">
+          {/* Drag & Drop tray */}
+          <div
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onClick={triggerSelectFile}
+            className="border-2 border-dashed border-slate-800 hover:border-blue-600/50 bg-slate-950/20 hover:bg-slate-950/40 rounded-2xl py-12 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 p-6 group"
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+              className="hidden"
+            />
+            <div className="bg-slate-900 group-hover:bg-blue-600/10 p-4 rounded-2xl border border-slate-800 transition-colors">
+              <UploadCloud className="w-6 h-6 text-slate-400 group-hover:text-blue-400 transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-200">
+                {file ? file.name : 'Drag & drop legal document here, or click to browse'}
+              </p>
+              <p className="text-slate-500 text-[10px] uppercase tracking-wide">
+                PDF, DOCX, TXT, Images (Max 10MB)
+              </p>
+            </div>
+          </div>
+
+          {file && (
+            <div className="flex items-center justify-between bg-slate-950/80 border border-slate-850 p-4 rounded-xl text-xs">
+              <div className="flex items-center space-x-3">
+                <div className="bg-blue-500/10 p-2.5 rounded-lg border border-blue-500/15 animate-pulse">
+                  <FileText className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-200">{file.name}</p>
+                  <p className="text-slate-500 text-[10px]">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                </div>
+              </div>
+              <button
+                onClick={handleAnalyze}
+                disabled={loading}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg transition-all flex items-center space-x-1.5 hover:-translate-y-0.5 shadow-md shadow-blue-600/10"
+              >
+                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>Start Deep Analysis</span>
+              </button>
+            </div>
+          )}
+
+          {statusMsg && (
+            <div className="p-4 bg-blue-950/20 border border-blue-500/20 text-blue-400 rounded-xl text-xs leading-relaxed text-center">
+              {statusMsg}
+            </div>
+          )}
+        </div>
+      )}
+
+      {analysis && (
+        <div className="space-y-8 animate-slide-in">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-slate-400">Analysis completed</span>
+            <button
+              onClick={() => {
+                setAnalysis(null);
+                setFile(null);
+              }}
+              className="border border-slate-800 hover:bg-slate-900 text-slate-350 hover:text-white text-xs px-4 py-2 rounded-xl transition-all"
+            >
+              Analyze Another Document
+            </button>
+          </div>
+
+          {/* Executive Summary Card */}
+          <div className="bg-gradient-to-tr from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl"></div>
+            <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2.5">Executive Summary</h3>
+            <p className="text-sm text-slate-200 font-light leading-relaxed whitespace-pre-wrap">{analysis.summary}</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Risks Card */}
+            <div className="bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 pb-2">
+                Risk Flags & Mitigations ({analysis.risks?.length || 0})
+              </h3>
+              {(!analysis.risks || analysis.risks.length === 0) ? (
+                <p className="text-slate-500 text-xs italic">No significant risks identified.</p>
+              ) : (
+                <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                  {analysis.risks.map((risk, idx) => (
+                    <div key={idx} className="bg-slate-950/30 border border-slate-850 rounded-xl p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${getSeverityStyles(risk.severity)}`}>
+                          {risk.severity || 'Medium'} Severity
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-200 font-light leading-relaxed">{risk.description}</p>
+                      <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-850/50">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Mitigation Strategy</span>
+                        <p className="text-[11px] text-slate-300 leading-relaxed font-light">{risk.mitigation}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Obligations/Dates Timeline Card */}
+            <div className="bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 pb-2">
+                Obligations Timeline ({analysis.dates?.length || 0})
+              </h3>
+              {(!analysis.dates || analysis.dates.length === 0) ? (
+                <p className="text-slate-500 text-xs italic">No explicit dates or deadlines identified.</p>
+              ) : (
+                <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                  {analysis.dates.map((item, idx) => (
+                    <div key={idx} className="relative pl-6 border-l border-blue-500/30 py-1 first:pt-0 last:pb-0">
+                      <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-500 border border-slate-900"></div>
+                      <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">{item.date}</div>
+                      <p className="text-xs text-slate-200 font-light leading-relaxed mt-0.5">{item.obligation}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Key Clauses Accordion */}
+          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 pb-2">
+              Key Clauses Audited ({analysis.key_clauses?.length || 0})
+            </h3>
+            {(!analysis.key_clauses || analysis.key_clauses.length === 0) ? (
+              <p className="text-slate-500 text-xs italic">No key clauses extracted.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {analysis.key_clauses.map((clause, idx) => {
+                  const isOpen = openClauseIdx === idx;
+                  return (
+                    <div key={idx} className="border border-slate-800 rounded-xl overflow-hidden transition-all">
+                      <button
+                        onClick={() => setOpenClauseIdx(isOpen ? null : idx)}
+                        className="w-full flex items-center justify-between p-4 bg-slate-950/20 hover:bg-slate-950/40 text-left text-xs font-bold text-slate-200 transition-colors"
+                      >
+                        <span>{clause.name}</span>
+                        <ChevronRight className={`w-4 h-4 text-slate-505 transform transition-transform ${isOpen ? 'rotate-90 text-blue-400' : ''}`} />
+                      </button>
+                      {isOpen && (
+                        <div className="p-4 bg-slate-950/10 border-t border-slate-850/80 space-y-3 animate-slide-in">
+                          {clause.text && (
+                            <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-850/50">
+                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Clause text</span>
+                              <p className="text-[11px] text-slate-400 italic leading-relaxed">"{clause.text}"</p>
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider block mb-1">Legal Explanation</span>
+                            <p className="text-xs text-slate-200 font-light leading-relaxed">{clause.explanation}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Precedence / Citation Mappings */}
+          <div className="bg-slate-900 border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 pb-2">
+              Statutory References & Precedents
+            </h3>
+            {(!analysis.precedents || analysis.precedents.length === 0) ? (
+              <p className="text-slate-500 text-xs italic">No external statutory references flagged.</p>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-3.5">
+                {analysis.precedents.map((item, idx) => (
+                  <div key={idx} className="bg-slate-950/30 border border-slate-850 rounded-xl p-4 space-y-2 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <a
+                        href={`https://indiankanoon.org/search/?formInput=${encodeURIComponent(item.citation)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-blue-405 hover:text-blue-305 hover:underline transition-colors flex items-center cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 mr-1.5" />
+                        {item.citation}
+                      </a>
+                      <p className="text-[11px] text-slate-300 leading-relaxed font-light">{item.relevance}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

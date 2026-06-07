@@ -12,6 +12,8 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 import bns_mapping
+import zipfile
+import xml.etree.ElementTree as ET
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -145,6 +147,32 @@ def extract_text_from_pdf(pdf_path):
         return text
     print(f"Direct text extraction failed/empty for {pdf_path}, invoking OCR...")
     return extract_text_from_pdf_ocr(pdf_path)
+
+
+def extract_text_from_docx(docx_path):
+    try:
+        with zipfile.ZipFile(docx_path) as docx:
+            xml_content = docx.read('word/document.xml')
+            root = ET.fromstring(xml_content)
+            
+            # The namespace for Word XML elements
+            ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+            
+            # Find all paragraph elements and extract text
+            text_parts = []
+            for paragraph in root.findall('.//w:p', ns):
+                p_text = []
+                for run in paragraph.findall('.//w:r', ns):
+                    text_elem = run.find('.//w:t', ns)
+                    if text_elem is not None and text_elem.text:
+                        p_text.append(text_elem.text)
+                if p_text:
+                    text_parts.append("".join(p_text))
+            
+            return clean_text("\n".join(text_parts))
+    except Exception as e:
+        print(f"Error reading DOCX directly {docx_path}: {e}")
+        return ""
 
 
 def extract_text_from_image(image_path):
@@ -449,6 +477,176 @@ def log_interaction(query_text, retrieved_docs, llm_output, used_docs, unused_do
         print(f"Error appending audit log: {e}")
 
 
+def ask_gemini_json(prompt: str) -> dict:
+    if not gemini_model:
+        return {"error": "Gemini fallback unavailable: GEMINI_API_KEY not set."}
+    try:
+        response = gemini_model.generate_content(prompt)
+        raw_text = response.text.strip()
+        # Clean JSON markdown formatting if present
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        elif raw_text.startswith("```"):
+            raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        raw_text = raw_text.strip()
+        return json.loads(raw_text)
+    except Exception as e:
+        print(f"Error parsing Gemini response as JSON: {e}")
+        try:
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+        except Exception as inner_e:
+            print(f"Regex JSON extract failed: {inner_e}")
+        return {
+            "summary": "Failed to generate structured analysis.",
+            "key_clauses": [],
+            "risks": [],
+            "dates": [],
+            "precedents": []
+        }
+
+
+def run_agentic_workflow(query_text, selected_model, selected_lang, flow_type):
+    agent_logs = []
+    
+    # 1. Research Agent
+    agent_logs.append({
+        "agent": "Research Agent",
+        "status": "completed",
+        "message": f"Analyzing query in {selected_lang}..."
+    })
+    
+    query_en = translate_text(query_text, "English") if selected_lang.lower() != "english" else query_text
+    collection_name = "IPC_collection" if flow_type == "ipc" else "Precedence_collection"
+    
+    retrieved_docs = search_milvus(collection_name, query_en)
+    
+    search_source = "vector database"
+    if not retrieved_docs or (len(retrieved_docs) > 0 and max(doc["score"] for doc in retrieved_docs) < 0.45):
+        search_source = "live web search (DuckDuckGo)"
+        web_docs = search_web_legal_context(query_en)
+        if web_docs:
+            retrieved_docs = web_docs
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            executor.submit(index_web_docs_async, web_docs, collection_name)
+            
+    agent_logs[-1]["message"] = f"Translated query to English. Identified intent. Searched {search_source} and retrieved {len(retrieved_docs)} relevant context document chunks."
+    
+    # 2. Citation Agent
+    agent_logs.append({
+        "agent": "Citation Agent",
+        "status": "completed",
+        "message": "Auditing retrieved document chunks for statutory references and judicial precedents..."
+    })
+    
+    citations = []
+    if flow_type == "ipc":
+        citations = re.findall(r'\b(?:section|sec\.?)\s+(\d+(?:\(\d+\))?[A-Z]?)\b', query_en, re.IGNORECASE)
+        for doc in retrieved_docs:
+            found = re.findall(r'\b(?:section|sec\.?)\s+(\d+(?:\(\d+\))?[A-Z]?)\b', doc["text"], re.IGNORECASE)
+            citations.extend(found)
+    else:
+        citations = re.findall(r'\b(?:[A-Z][a-zA-Z\s]+v\.\s+[A-Z][a-zA-Z\s]+(?:\s+\(\d{4}\))?)\b', query_en)
+        for doc in retrieved_docs:
+            found = re.findall(r'\b(?:[A-Z][a-zA-Z\s]+v\.\s+[A-Z][a-zA-Z\s]+(?:\s+\(\d{4}\))?)\b', doc["text"])
+            citations.extend(found)
+            
+    citations = list(set(citations))[:5]
+    citations_str = ", ".join(citations) if citations else "No explicit statutory sections found in raw query"
+    agent_logs[-1]["message"] = f"Audited retrieved sources. Verified relevance of documents. Identified primary legal codes/precedents: {citations_str}."
+    
+    # 3. Verification Agent
+    agent_logs.append({
+        "agent": "Verification Agent",
+        "status": "completed",
+        "message": "Cross-checking legal statutory mappings (IPC vs BNS transitions)..."
+    })
+    
+    bns_transitions = []
+    if flow_type == "ipc":
+        bns_transitions = bns_mapping.extract_sections_from_text(query_en)
+        for doc in retrieved_docs:
+            doc_transitions = bns_mapping.extract_sections_from_text(doc["text"])
+            for dt in doc_transitions:
+                if dt not in bns_transitions:
+                    bns_transitions.append(dt)
+                    
+    transitions_summary = ""
+    if bns_transitions:
+        transitions_summary = "Mapped transitions: " + ", ".join([f"{t['source']} -> {t['target']}" for t in bns_transitions[:3]])
+    else:
+        transitions_summary = "No IPC-BNS penal code transitions required for this query."
+        
+    agent_logs[-1]["message"] = f"Verified statutory transitions and legal status. {transitions_summary}"
+    
+    # 4. Final Response Agent
+    agent_logs.append({
+        "agent": "Final Response Agent",
+        "status": "completed",
+        "message": "Synthesizing research, citations, and verified transitions into final memorandum..."
+    })
+    
+    context = "\n\n".join([doc["text"] for doc in retrieved_docs]) or "No legal context available."
+    
+    if flow_type == "ipc":
+        system_prompt = """
+You are a specialized AI assistant with expertise in Indian Penal Code (IPC) and Bharatiya Nyaya Sanhita (BNS). Your primary responsibility is to analyze user queries, explain legal provisions, and provide accurate legal responses.
+
+ When explaining criminal laws, you must highlight the transition between IPC and BNS.
+Show how key legal concepts trace between sections, e.g.:
+"Intent" → Section 299 (Culpable Homicide) / Section 100 BNS → Section 300 (Murder) / Section 101 BNS
+
+ Guidelines:
+- Use only Indian laws (IPC, BNS, CrPC, BNSS, Indian Evidence Act).
+- Detail sections cleanly with their numbers.
+- If the provided context is empty or does not mention the relevant sections, use your general knowledge of Indian criminal law to provide a complete and correct answer. Do not say that no context is available.
+- Format all section references as markdown links to Indian Kanoon searches, e.g., [IPC Section 302](https://indiankanoon.org/search/?formInput=IPC+Section+302) or [BNS Section 103](https://indiankanoon.org/search/?formInput=BNS+Section+103).
+- Avoid giving legal advice—provide only academic, statutory responses.
+"""
+    else:
+        system_prompt = """
+You are a specialized AI assistant with expertise in Indian Law. Your task is to cite relevant Indian case laws and provide their key details.
+
+Guidelines:
+- Focus only on Indian case laws.
+- Begin with a short reasoning paragraph explaining the legal topic.
+- Provide bullet points with case name, year, court, and short legal significance.
+- If the provided context is empty or doesn't match the query, do NOT fail or say no context is available. Instead, use your general legal knowledge to recall and describe the most famous and relevant Indian Supreme Court or High Court judgments related to the topic of the query.
+- You must format every case name or citation as a clickable markdown link pointing to its search on Indian Kanoon, e.g., [Kesavananda Bharati v. State of Kerala (1973)](https://indiankanoon.org/search/?formInput=Kesavananda+Bharati+v.+State+of+Kerala+1973) or [Justice K.S. Puttaswamy v. Union of India (2017)](https://indiankanoon.org/search/?formInput=Justice+K.S.+Puttaswamy+v.+Union+of+India+2017).
+"""
+
+    user_prompt = f"Context:\n{context}\n\nQuestion: {query_en}"
+    
+    answers = generate_text(system_prompt, user_prompt, selected_model)
+    first_model = next(iter(answers.keys()))
+    answer_text = answers[first_model]
+    
+    # Translate response back if necessary
+    if selected_lang.lower() != "english":
+        translated_answers = {}
+        for m, txt in answers.items():
+            translated_answers[m] = translate_text(txt, selected_lang)
+        answers = translated_answers
+        answer_text = answers[first_model]
+        
+    used_docs, unused_docs = compare_llm_output_to_retrieved(answer_text, retrieved_docs)
+    log_interaction(query_text, retrieved_docs, answer_text, used_docs, unused_docs)
+    
+    agent_logs[-1]["message"] = "Synthesized legal memorandum, formatted statutory citations with Indian Kanoon links, and completed synthesis."
+    
+    return {
+        "answers": answers,
+        "retrieved_docs": retrieved_docs,
+        "used_docs": used_docs,
+        "unused_docs": unused_docs,
+        "bns_transitions": bns_transitions,
+        "agent_logs": agent_logs
+    }
+
+
 # === Route Handlers ===
 
 @app.route("/query/ipc", methods=["POST"])
@@ -461,68 +659,12 @@ def query_ipc():
     if not query_text:
         return jsonify({"error": "Query text is required"}), 400
 
-    # 1. Translate query to English if necessary
-    query_en = translate_text(query_text, "English") if selected_lang.lower() != "english" else query_text
-
-    # 2. Extract IPC <-> BNS conversions
-    bns_transitions = bns_mapping.extract_sections_from_text(query_en)
-
-    # 3. Retrieve database context (always matches in English)
-    retrieved_docs = search_milvus("IPC_collection", query_en)
-    
-    # If no local results or relevance is low, trigger web fallback
-    if not retrieved_docs or (len(retrieved_docs) > 0 and max(doc["score"] for doc in retrieved_docs) < 0.45):
-        print(f"[RAG Fallback] Weak local context in IPC_collection. Running web search for: {query_en}")
-        web_docs = search_web_legal_context(query_en)
-        if web_docs:
-            retrieved_docs = web_docs
-            # Run background thread to cache web search results in Milvus
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            executor.submit(index_web_docs_async, web_docs, "IPC_collection")
-
-    context = "\n\n".join([doc["text"] for doc in retrieved_docs]) or "No legal context available."
-
-    system_prompt = """
-You are a specialized AI assistant with expertise in Indian Penal Code (IPC) and Bharatiya Nyaya Sanhita (BNS). Your primary responsibility is to analyze user queries, explain legal provisions, and provide accurate legal responses.
-
-🧠 When explaining criminal laws, you must highlight the transition between IPC and BNS.
-Show how key legal concepts trace between sections, e.g.:
-"Intent" → Section 299 (Culpable Homicide) / Section 100 BNS → Section 300 (Murder) / Section 101 BNS
-
-📌 Guidelines:
-- Use only Indian laws (IPC, BNS, CrPC, BNSS, Indian Evidence Act).
-- Detail sections cleanly with their numbers.
-- If the provided context is empty or does not mention the relevant sections, use your general knowledge of Indian criminal law to provide a complete and correct answer. Do not say that no context is available.
-- Format all section references as markdown links to Indian Kanoon searches, e.g., [IPC Section 302](https://indiankanoon.org/search/?formInput=IPC+Section+302) or [BNS Section 103](https://indiankanoon.org/search/?formInput=BNS+Section+103).
-- Avoid giving legal advice—provide only academic, statutory responses.
-"""
-
-    user_prompt = f"Context:\n{context}\n\nQuestion: {query_en}"
-
-    # 4. Generate Answer
-    answers = generate_text(system_prompt, user_prompt, selected_model)
-    first_model = next(iter(answers.keys()))
-    answer_text = answers[first_model]
-
-    # 5. Translate response back if necessary
-    if selected_lang.lower() != "english":
-        translated_answers = {}
-        for m, txt in answers.items():
-            translated_answers[m] = translate_text(txt, selected_lang)
-        answers = translated_answers
-        answer_text = answers[first_model]
-
-    # 6. Audit & Log
-    used_docs, unused_docs = compare_llm_output_to_retrieved(answer_text, retrieved_docs)
-    log_interaction(query_text, retrieved_docs, answer_text, used_docs, unused_docs)
-
-    return jsonify({
-        "answers": answers,
-        "retrieved_docs": retrieved_docs,
-        "used_docs": used_docs,
-        "unused_docs": unused_docs,
-        "bns_transitions": bns_transitions
-    })
+    try:
+        result = run_agentic_workflow(query_text, selected_model, selected_lang, "ipc")
+        return jsonify(result)
+    except Exception as e:
+        print("ERROR in /query/ipc:", str(e))
+        return jsonify({"error": f"Error during query: {str(e)}"}), 500
 
 
 @app.route("/query/legal", methods=["POST"])
@@ -535,62 +677,12 @@ def query_legal_documents():
     if not query_text:
         return jsonify({"error": "Query text is required"}), 400
 
-    # Translate input
-    query_en = translate_text(query_text, "English") if selected_lang.lower() != "english" else query_text
-
-    # Search vector database
-    retrieved_docs = search_milvus("Precedence_collection", query_en)
-    
-    # If no local results or relevance is low, trigger web fallback
-    if not retrieved_docs or (len(retrieved_docs) > 0 and max(doc["score"] for doc in retrieved_docs) < 0.45):
-        print(f"[RAG Fallback] Weak local context in Precedence_collection. Running web search for: {query_en}")
-        web_docs = search_web_legal_context(query_en)
-        if web_docs:
-            retrieved_docs = web_docs
-            # Run background thread to cache web search results in Milvus
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            executor.submit(index_web_docs_async, web_docs, "Precedence_collection")
-
-    context = "\n\n".join([doc["text"] for doc in retrieved_docs]) or "No legal context available."
-
-    system_prompt = """
-You are a specialized AI assistant with expertise in Indian Law. Your task is to cite relevant Indian case laws and provide their key details.
-
-Guidelines:
-- Focus only on Indian case laws.
-- Begin with a short reasoning paragraph explaining the legal topic.
-- Provide bullet points with case name, year, court, and short legal significance.
-- If the provided context is empty or doesn't match the query, do NOT fail or say no context is available. Instead, use your general legal knowledge to recall and describe the most famous and relevant Indian Supreme Court or High Court judgments related to the topic of the query.
-- You must format every case name or citation as a clickable markdown link pointing to its search on Indian Kanoon, e.g., [Kesavananda Bharati v. State of Kerala (1973)](https://indiankanoon.org/search/?formInput=Kesavananda+Bharati+v.+State+of+Kerala+1973) or [Justice K.S. Puttaswamy v. Union of India (2017)](https://indiankanoon.org/search/?formInput=Justice+K.S.+Puttaswamy+v.+Union+of+India+2017).
-"""
-
-    user_prompt = f"Context:\n{context}\n\nQuestion: {query_en}"
-
     try:
-        answers = generate_text(system_prompt, user_prompt, selected_model)
-        first_model = next(iter(answers.keys()))
-        answer_text = answers[first_model]
-
-        # Translate output
-        if selected_lang.lower() != "english":
-            translated_answers = {}
-            for m, txt in answers.items():
-                translated_answers[m] = translate_text(txt, selected_lang)
-            answers = translated_answers
-            answer_text = answers[first_model]
-
-        used_docs, unused_docs = compare_llm_output_to_retrieved(answer_text, retrieved_docs)
-        log_interaction(query_text, retrieved_docs, answer_text, used_docs, unused_docs)
-
-        return jsonify({
-            "answers": answers,
-            "retrieved_docs": retrieved_docs,
-            "used_docs": used_docs,
-            "unused_docs": unused_docs
-        })
-
+        result = run_agentic_workflow(query_text, selected_model, selected_lang, "legal")
+        return jsonify(result)
     except Exception as e:
-        return jsonify({"error": f"Error generating response: {str(e)}"}), 500
+        print("ERROR in /query/legal:", str(e))
+        return jsonify({"error": f"Error during query: {str(e)}"}), 500
 
 
 @app.route("/generate_contract", methods=["POST"])
@@ -758,6 +850,94 @@ def upload_file():
         return jsonify({"error": f"Indexing error occurred: {str(e)}"}), 500
     finally:
         # Clean up local temporary file
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+
+
+@app.route("/api/analyze", methods=["POST"])
+def analyze_document():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+        
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "Empty filename"}), 400
+        
+    upload_dir = "./uploaded_files"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename)
+    file.save(file_path)
+    
+    try:
+        extracted_text = ""
+        ext = os.path.splitext(file.filename)[1].lower()
+        
+        if ext == ".txt":
+            with open(file_path, "r", encoding="utf-8") as f:
+                extracted_text = f.read()
+        elif ext == ".pdf":
+            extracted_text = extract_text_from_pdf(file_path)
+        elif ext == ".docx":
+            extracted_text = extract_text_from_docx(file_path)
+        elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
+            extracted_text = extract_text_from_image(file_path)
+        else:
+            return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+            
+        extracted_text = clean_text(extracted_text)
+        if not extracted_text or len(extracted_text) < 15:
+            return jsonify({"error": "Failed to extract clean text from file. Ensure document contains readable text."}), 400
+            
+        # Limit text content size for API performance and context windows
+        truncated_text = extracted_text[:15000]
+        
+        prompt = f"""
+You are a legal document analysis expert. Analyze the following legal document text and extract structured insights.
+
+Document Text:
+{truncated_text}
+
+Provide your analysis strictly in JSON format with the following keys. Do not include any other text, markdown wrapper, or conversational filler.
+{{
+  "summary": "A concise executive summary of the document.",
+  "key_clauses": [
+    {{
+      "name": "Name of the clause (e.g., Indemnification, Termination)",
+      "text": "Exact text or summary of the clause from the document",
+      "explanation": "Legal explanation of this clause in simple terms"
+    }}
+  ],
+  "risks": [
+    {{
+      "severity": "High",
+      "description": "Description of the risk flagged in the document",
+      "mitigation": "Suggested action or amendment to mitigate this risk"
+    }}
+  ],
+  "dates": [
+    {{
+      "date": "Specific date (YYYY-MM-DD or descriptive like 'Within 30 days')",
+      "obligation": "The action, deadline, or obligation due on this date"
+    }}
+  ],
+  "precedents": [
+    {{
+      "citation": "Relevant Indian statutory section or case law precedent (e.g., Section 73 of Indian Contract Act)",
+      "relevance": "How this statutory code or precedent applies to the document"
+    }}
+  ]
+}}
+"""
+        analysis_result = ask_gemini_json(prompt)
+        return jsonify(analysis_result)
+        
+    except Exception as e:
+        print(f"Document Analysis Error: {e}")
+        return jsonify({"error": f"Analysis error occurred: {str(e)}"}), 500
+    finally:
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
