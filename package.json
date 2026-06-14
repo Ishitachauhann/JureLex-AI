@@ -1,4 +1,9 @@
 {
+  "name": "jurelex-ai-root",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cd .. && cp -r frontend/dist ./dist"
+  },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.11",
     "tailwindcss": "^4.1.11"
